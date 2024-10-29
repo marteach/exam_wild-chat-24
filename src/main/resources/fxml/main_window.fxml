@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane id="AnchorPane" prefHeight="400.0" prefWidth="591.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controllers.MainWindowController">
+   <children>
+      <Button fx:id="btnSend" layoutX="484.0" layoutY="361.0" mnemonicParsing="false" onAction="#handleSendButton" prefHeight="25.0" prefWidth="93.0" text="Send" />
+      <TextField fx:id="txtMessage" layoutX="116.0" layoutY="361.0" onAction="#handleSendButton" prefHeight="25.0" prefWidth="363.0" promptText="Message" />
+      <TextArea fx:id="txtAreaChat" editable="false" layoutX="14.0" layoutY="14.0" prefHeight="343.0" prefWidth="465.0" wrapText="true" />
+      <TextField fx:id="txtName" layoutX="14.0" layoutY="361.0" prefHeight="25.0" prefWidth="99.0" promptText="Your name" />
+      <Group fx:id="groupRadio" layoutX="484.0" layoutY="14.0" AnchorPane.bottomAnchor="368.0" AnchorPane.leftAnchor="484.0" AnchorPane.rightAnchor="26.205078125" AnchorPane.topAnchor="14.0">
+         <children>
+            <RadioButton fx:id="cbWebSocket" mnemonicParsing="false" text="WebSocket">
+               <toggleGroup>
+                  <ToggleGroup fx:id="gg" />
+               </toggleGroup>
+               <padding>
+                  <Insets top="25.0" />
+               </padding>
+            </RadioButton>
+            <RadioButton fx:id="cbUDP" mnemonicParsing="false" selected="true" text="UDP" toggleGroup="$gg" />
+         </children>
+      </Group>
+   </children>
+</AnchorPane>

@@ -1,0 +1,1 @@
+Se lab_chat_beskrivning.pdf för laborations beskrivning.
