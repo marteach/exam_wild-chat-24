@@ -2,7 +2,10 @@ package communication;
 
 import controllers.MainWindowController;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+
 
 /**
  * The communicator handles the network traffic between all chat clients.
@@ -14,13 +17,13 @@ import java.net.*;
  */
 public class UDPChatCommunicator implements Runnable {
 
-    private final int DATAGRAM_LENGTH = 100;
     private final int PORT = 6789;
-    private final String MULTICAST_ADDRESS = "228.28.28.28";
-    private InetSocketAddress _group;
-    private NetworkInterface _netIf;
+    private static final int BUFFER_SIZE = 4096;
+    private static final String RECEIVER_ADDRESS = "::1";
+    private DatagramSocket _socket = null;
+    private boolean _listening = true;
+
     private MainWindowController _chat = null;
-    private MulticastSocket _socket = null;
 
     /**
      * Create a chat communicator that communicates over UDP.
@@ -33,7 +36,9 @@ public class UDPChatCommunicator implements Runnable {
          * force java to use IPv4 so we do not get a problem when using IPv4 multicast
          * address
          */
-        System.setProperty("java.net.preferIPv4Stack", "true");
+        //Changed to DatagramSocket since IPv6 now is common enogh to be used. 
+        //IPv4 is also hard to force in mac in java 21+ it seems.
+        //System.setProperty("java.net.preferIPv4Stack", "true");
     }
 
     /**
@@ -45,17 +50,19 @@ public class UDPChatCommunicator implements Runnable {
      */
     public void sendChat(String sender, String message) throws Exception {
 
-        try (DatagramSocket socket = new DatagramSocket()) {
-            String toSend = sender + ": " + message;
-            byte[] b = toSend.getBytes();
+        String msg = sender + ": " + message;
 
-            DatagramPacket datagram = new DatagramPacket(b, b.length, InetAddress.getByName(MULTICAST_ADDRESS), PORT);
+        try {
+            DatagramSocket socket = new DatagramSocket();
 
-            socket.send(datagram);
-            socket.disconnect();
+            byte[] buffer = msg.getBytes();
+            InetAddress receiver_address = InetAddress.getByName(RECEIVER_ADDRESS);
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, receiver_address, PORT);
+
+            socket.send(packet);
             socket.close();
-        } catch (Exception e) {
-            throw e;
+        } catch (IOException e) {
+            _chat.error(e);
         }
     }
 
@@ -72,33 +79,41 @@ public class UDPChatCommunicator implements Runnable {
      * @throws Exception If there is an IO error.
      */
     private void listenForMessages() throws Exception {
-        byte[] b = new byte[DATAGRAM_LENGTH];
-        DatagramPacket datagram = new DatagramPacket(b, b.length);
+        try {
+            _socket = new DatagramSocket(PORT);
 
-        if(_socket == null) {
-            _group = new InetSocketAddress(InetAddress.getByName(MULTICAST_ADDRESS), PORT);
-            _netIf = NetworkInterface.getByName("bge0");
-            _socket = new MulticastSocket(PORT);
+            byte[] buffer = new byte[BUFFER_SIZE];
+
+            while (_listening) {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+                _socket.receive(packet);
+                String msg = new String(packet.getData(), 0, packet.getLength());
+
+                //Send the message to the chat controller
+                _chat.receiveMessage(msg);
+            }
+
+            _socket.close();
+        } catch (IOException e) {
+            _chat.error(e);
         }
-
-        _socket.joinGroup(_group, _netIf);
-
-        while (true) {
-            _socket.receive(datagram);
-            String message = new String(datagram.getData());
-            message = message.substring(0, datagram.getLength());
-            _chat.receiveMessage(message);
-            datagram.setLength(b.length);
-        }
-
     }
+
 
     /**
      * Stop listen, we leave the group..
+     * 
      * @throws Exception
      */
     public void stopListen() throws Exception {
-        _socket.leaveGroup(_group, _netIf);
+        _listening = false;
+
+        try {
+            _socket.close();
+        } catch (Exception e) {
+            _chat.error(e);
+        }
     }
 
     @Override
