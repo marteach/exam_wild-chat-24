@@ -13,7 +13,7 @@ import java.net.URISyntaxException;
  */
 public class WebSocketCommunicator {
 
-    private final String WEB_SOCKET_ADDRESS = "https://api-internal.azurewebsites.net";
+    private final String WEB_SOCKET_ADDRESS = "https://work-58y8.onrender.com/";
     private Socket IOSocket;
     private MainWindowController _chat = null;
 
