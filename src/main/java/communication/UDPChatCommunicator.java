@@ -94,7 +94,6 @@ public class UDPChatCommunicator implements Runnable {
                 _chat.receiveMessage(msg);
             }
 
-            _socket.close();
         } catch (IOException e) {
             _chat.error(e);
         }
