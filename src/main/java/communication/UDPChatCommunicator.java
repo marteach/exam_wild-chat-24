@@ -2,10 +2,8 @@ package communication;
 
 import controllers.MainWindowController;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-
+import java.net.*;
+import java.util.Enumeration;
 
 /**
  * The communicator handles the network traffic between all chat clients.
@@ -17,13 +15,14 @@ import java.net.InetAddress;
  */
 public class UDPChatCommunicator implements Runnable {
 
+    private final int DATAGRAM_LENGTH = 100;
     private final int PORT = 6789;
-    private static final int BUFFER_SIZE = 4096;
-    private static final String RECEIVER_ADDRESS = "::1";
-    private DatagramSocket _socket = null;
-    private boolean _listening = true;
-
+    private final String MULTICAST_ADDRESS = "228.28.28.28";
+    
+    private InetSocketAddress _group;
+    private NetworkInterface _netIf;
     private MainWindowController _chat = null;
+    private MulticastSocket _socket = null;
 
     /**
      * Create a chat communicator that communicates over UDP.
@@ -36,9 +35,7 @@ public class UDPChatCommunicator implements Runnable {
          * force java to use IPv4 so we do not get a problem when using IPv4 multicast
          * address
          */
-        //Changed to DatagramSocket since IPv6 now is common enogh to be used. 
-        //IPv4 is also hard to force in mac in java 21+ it seems.
-        //System.setProperty("java.net.preferIPv4Stack", "true");
+       System.setProperty("java.net.preferIPv4Stack", "true");
     }
 
     /**
@@ -50,19 +47,17 @@ public class UDPChatCommunicator implements Runnable {
      */
     public void sendChat(String sender, String message) throws Exception {
 
-        String msg = sender + ": " + message;
+        try (DatagramSocket socket = new DatagramSocket()) {
+            String toSend = sender + ": " + message;
+            byte[] b = toSend.getBytes();
 
-        try {
-            DatagramSocket socket = new DatagramSocket();
+            DatagramPacket datagram = new DatagramPacket(b, b.length, InetAddress.getByName(MULTICAST_ADDRESS), PORT);
 
-            byte[] buffer = msg.getBytes();
-            InetAddress receiver_address = InetAddress.getByName(RECEIVER_ADDRESS);
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, receiver_address, PORT);
-
-            socket.send(packet);
+            socket.send(datagram);
+            socket.disconnect();
             socket.close();
-        } catch (IOException e) {
-            _chat.error(e);
+        } catch (Exception e) {
+            throw e;
         }
     }
 
@@ -73,46 +68,63 @@ public class UDPChatCommunicator implements Runnable {
         new Thread(this).start();
     }
 
+    @SuppressWarnings("finally")
+    private String retriveNetworkInterface() {
+        String answer = "bge0"; // default value windows
+
+        try {
+            final Enumeration<NetworkInterface> netifs = NetworkInterface.getNetworkInterfaces();
+            InetAddress myAddr = InetAddress.getLocalHost();
+
+            while (netifs.hasMoreElements()) {
+                NetworkInterface networkInterface = netifs.nextElement();
+                Enumeration<InetAddress> inAddrs = networkInterface.getInetAddresses();
+                while (inAddrs.hasMoreElements()) {
+                    InetAddress inAddr = inAddrs.nextElement();
+                    if (inAddr.equals(myAddr)) {
+                        System.out.println("Using network interface: " + networkInterface.getName());
+                        answer = networkInterface.getName();
+                    }
+                }
+            }
+        } catch (SocketException | UnknownHostException e) {
+            _chat.error(e);
+        } finally {
+            return answer;
+        }
+    }
+
     /**
      * Listen for messages from other clients.
      *
      * @throws Exception If there is an IO error.
      */
     private void listenForMessages() throws Exception {
-        try {
-            _socket = new DatagramSocket(PORT);
+        byte[] b = new byte[DATAGRAM_LENGTH];
+        DatagramPacket datagram = new DatagramPacket(b, b.length);
 
-            byte[] buffer = new byte[BUFFER_SIZE];
-
-            while (_listening) {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-
-                _socket.receive(packet);
-                String msg = new String(packet.getData(), 0, packet.getLength());
-
-                //Send the message to the chat controller
-                _chat.receiveMessage(msg);
-            }
-
-        } catch (IOException e) {
-            _chat.error(e);
+        if (_socket == null) {
+            _group = new InetSocketAddress(InetAddress.getByName(MULTICAST_ADDRESS), PORT);
+            _netIf = NetworkInterface.getByName(retriveNetworkInterface());
+            _socket = new MulticastSocket(PORT);
         }
+
+        _socket.joinGroup(_group, _netIf);
+
+        while (true) {
+            _socket.receive(datagram);
+            String message = new String(datagram.getData());
+            message = message.substring(0, datagram.getLength());
+
+            _chat.receiveMessage(message); // <<<<<<------------ send the message to the UI
+
+            datagram.setLength(b.length);
+        }
+
     }
 
-
-    /**
-     * Stop listen, we leave the group..
-     * 
-     * @throws Exception
-     */
     public void stopListen() throws Exception {
-        _listening = false;
-
-        try {
-            _socket.close();
-        } catch (Exception e) {
-            _chat.error(e);
-        }
+        _socket.leaveGroup(_group, _netIf);
     }
 
     @Override
